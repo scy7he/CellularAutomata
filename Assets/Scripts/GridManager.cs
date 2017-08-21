@@ -55,13 +55,13 @@ public class GridManager : MonoBehaviour {
 
   Transform gameSpace;
 
-  private bool[,] grid;
+  private bool[,] grid, prevGrid;
   private GameObject[,] displayGrid;
 
   int currentIteration = 0;
-  const int MAX_ITERATION_COUNT = 1;
+  const int MAX_ITERATION_COUNT = 100;
   float timeLastIterated = 0,
-        iterationDelay = 1f;
+        iterationDelay = .5f;
 
   public bool debug;
 
@@ -72,6 +72,7 @@ public class GridManager : MonoBehaviour {
     displayGrid = InitializeDisplayGrid (grid, debug);
 
     DrawCells (displayGrid, SPACE_BETWEEN_CELLS, cellObject.transform.localScale.x, gameSpace.position.z);
+    UpdateDebugNeighbours();
 	}
 
 
@@ -148,18 +149,20 @@ public class GridManager : MonoBehaviour {
 
 
 	void Update () {
-
-    if ((currentIteration < MAX_ITERATION_COUNT) && ((Time.fixedTime - timeLastIterated) >= iterationDelay)) {
-
-      grid = GetNextGeneration(grid);
-      UpdateDisplayGrid(grid);
-      // DrawCells(grid)
-      
-
-      timeLastIterated = Time.fixedTime;
-      currentIteration++;
-    }
+    if (!debug)
+      if ((currentIteration < MAX_ITERATION_COUNT) && ((Time.fixedTime - timeLastIterated) >= iterationDelay)) {
+        IncrementGeneration();
+      }
 	}
+
+  void IncrementGeneration(){
+    prevGrid = grid;
+    grid = GetNextGeneration(grid);
+    UpdateDisplayGrid(grid);
+    UpdateDebugNeighbours();
+    timeLastIterated = Time.fixedTime;
+    currentIteration++;
+  }
 
   void UpdateDisplayGrid(bool[,] updatedGeneration) {
     for (int y = 0; y < updatedGeneration.GetLength(0); y++) {
@@ -178,22 +181,29 @@ public class GridManager : MonoBehaviour {
     }
   }
 
-
   bool[,] GetNextGeneration(bool[,] thisGeneration) {
     bool[,] newGeneration = new bool[thisGeneration.GetLength(0), thisGeneration.GetLength(0)];
     for (int y = 0; y < thisGeneration.GetLength(0); y++) {
-      // string output = "";
       for (int x = 0; x < thisGeneration.GetLength(0); x++) {
         int alive = GetNeighbours(x, y).Count;
         newGeneration[y, x] = GetLiveOrDie(rules, thisGeneration[y,x], alive);
         displayGrid[y, x].transform.Find("DebugText").GetComponent<TextMesh>().text = alive+"";
+      }
+    }
 
+    return newGeneration;
+  }
+
+  void UpdateDebugNeighbours() {
+    for (int y = 0; y < grid.GetLength(0); y++) {
+      // string output = "";
+      for (int x = 0; x < grid.GetLength(0); x++) {
+        int alive = GetNeighbours(x, y).Count;
+        displayGrid[y, x].transform.Find("DebugText").GetComponent<TextMesh>().text = alive+"";
         // output += " "+newGeneration[y, x];
       }
       // Debug.Log(output);
     }
-
-    return newGeneration;
   }
 
   bool GetLiveOrDie(Dictionary<StateNeighbourMap, bool> rules, bool alive, int aliveNeighbours) {
@@ -237,6 +247,14 @@ public class GridManager : MonoBehaviour {
     renderer.materials = materials;
 
   }
+
+   void OnGUI() {
+      // if (GUILayout.Button("Prev Generation"))
+      //   Debug.Log("Hello!");
+      if (debug)
+        if (GUILayout.Button("Next Generation"))
+          IncrementGeneration();
+    }
 }
 
 //
