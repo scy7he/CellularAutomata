@@ -50,7 +50,7 @@ public class GridManager : MonoBehaviour {
   public Material ALIVE_MATERIAL,
                   DEAD_MATERIAL;
 
-  public const int NUMBER_OF_CELLS = 10;
+  public int NUMBER_OF_CELLS = 15;
   public const float SPACE_BETWEEN_CELLS = 0.1f;
 
   Transform gameSpace;
@@ -58,16 +58,20 @@ public class GridManager : MonoBehaviour {
   private bool[,] grid, prevGrid;
   private GameObject[,] displayGrid;
 
-  int currentIteration = 0;
+  int currentIteration = 0,
+      animationIteration = 0;
   const int MAX_ITERATION_COUNT = 100;
+  public float iterationDelay;
   float timeLastIterated = 0,
-        iterationDelay = .5f;
+        timeLastAnimated = 0,
+        animationDelay;
 
   public bool debug;
 
 	void Awake () {
     gameSpace = GetComponent<Transform> ();
     grid = InitializeGrid (NUMBER_OF_CELLS);
+    animationDelay = iterationDelay/10f;
 
     displayGrid = InitializeDisplayGrid (grid, debug);
 
@@ -103,14 +107,7 @@ public class GridManager : MonoBehaviour {
           currentCell.transform.GetChild(0).gameObject.SetActive(false);
         visualGrid [y, x] = currentCell;
 
-        Material[] materials = currentCell.GetComponent<Renderer>().materials;
-
-        Material selectedMaterial = isAlive ? ALIVE_MATERIAL : DEAD_MATERIAL;
-
-        materials [0] = (Material)Instantiate (selectedMaterial);
-
-        currentCell.GetComponent<Renderer>().materials = materials;
-
+        ChangeObjectMaterial(currentCell, isAlive ? ALIVE_MATERIAL : DEAD_MATERIAL);
       }
     }
 
@@ -120,9 +117,7 @@ public class GridManager : MonoBehaviour {
 
 
   bool GetAliveOrDeadRandom(){
-    float randomSeed = Random.value;
-
-    return (randomSeed > 0.5f) ? true : false;
+    return (Random.value > 0.5f) ? true : false;
   }
 
 
@@ -149,6 +144,10 @@ public class GridManager : MonoBehaviour {
 
 
 	void Update () {
+    if (Time.fixedTime - timeLastAnimated > animationDelay) {
+      AnimateCellMaterial();
+    }
+
     if (!debug)
       if ((currentIteration < MAX_ITERATION_COUNT) && ((Time.fixedTime - timeLastIterated) >= iterationDelay)) {
         IncrementGeneration();
@@ -161,7 +160,24 @@ public class GridManager : MonoBehaviour {
     UpdateDisplayGrid(grid);
     UpdateDebugNeighbours();
     timeLastIterated = Time.fixedTime;
+    animationIteration = 0;
     currentIteration++;
+  }
+
+  void AnimateCellMaterial() {
+    animationIteration++;
+    for (int y = 0; y < grid.GetLength(0); y++) {
+      for (int x = 0; x < grid.GetLength(0); x++) {
+        bool isAlive = grid [y, x];
+
+        int aliveNeighbours = GetNeighbours(x, y).Count;
+        bool willLive = GetLiveOrDie(rules, grid[y,x], aliveNeighbours);
+
+        GameObject currentCell = displayGrid[y, x];
+        FadeObjectMaterialColor(currentCell, willLive);
+      }
+    }
+    timeLastAnimated = Time.fixedTime;
   }
 
   void UpdateDisplayGrid(bool[,] updatedGeneration) {
@@ -170,13 +186,8 @@ public class GridManager : MonoBehaviour {
         bool isAlive = updatedGeneration [y, x];
 
         GameObject currentCell = displayGrid[y, x];
-        Material[] materials = currentCell.GetComponent<Renderer>().materials;
-
         Material selectedMaterial = isAlive ? ALIVE_MATERIAL : DEAD_MATERIAL;
-
-        materials [0] = (Material)Instantiate (selectedMaterial);
-
-        currentCell.GetComponent<Renderer>().materials = materials;
+        ChangeObjectMaterial(currentCell, selectedMaterial);
       }
     }
   }
@@ -187,7 +198,7 @@ public class GridManager : MonoBehaviour {
       for (int x = 0; x < thisGeneration.GetLength(0); x++) {
         int alive = GetNeighbours(x, y).Count;
         newGeneration[y, x] = GetLiveOrDie(rules, thisGeneration[y,x], alive);
-        displayGrid[y, x].transform.Find("DebugText").GetComponent<TextMesh>().text = alive+"";
+        displayGrid[y, x].transform.Find("DebugText").GetComponent<TextMesh>().text = alive.ToString();
       }
     }
 
@@ -196,13 +207,10 @@ public class GridManager : MonoBehaviour {
 
   void UpdateDebugNeighbours() {
     for (int y = 0; y < grid.GetLength(0); y++) {
-      // string output = "";
       for (int x = 0; x < grid.GetLength(0); x++) {
         int alive = GetNeighbours(x, y).Count;
         displayGrid[y, x].transform.Find("DebugText").GetComponent<TextMesh>().text = alive+"";
-        // output += " "+newGeneration[y, x];
       }
-      // Debug.Log(output);
     }
   }
 
@@ -240,21 +248,34 @@ public class GridManager : MonoBehaviour {
     return neighbours;
   }
 
-  void ChangeObjectColor(GameObject objectToChange, Color color) {
-    Renderer renderer = objectToChange.GetComponent<Renderer> ();
-    Material[] materials = renderer.materials;
-    materials [0].SetColor ("_Color", Color.cyan);
-    renderer.materials = materials;
+  void FadeObjectMaterialColor(GameObject obj, bool willLive) {
+    Material material = obj.GetComponent<Renderer>().materials[0];
+    Material newMaterial = (Material)Instantiate (material);
 
-  }
+    float perc = (animationIteration/(iterationDelay / animationDelay));
+    Material targetMat = willLive ? ALIVE_MATERIAL : DEAD_MATERIAL;
 
-   void OnGUI() {
-      // if (GUILayout.Button("Prev Generation"))
-      //   Debug.Log("Hello!");
-      if (debug)
-        if (GUILayout.Button("Next Generation"))
-          IncrementGeneration();
-    }
+    Color transitionColor = Color.Lerp(
+      material.GetColor("_Color"),
+      targetMat.GetColor("_Color"),
+      perc
+    );
+    
+    newMaterial.SetColor("_Color", transitionColor); 
+    ChangeObjectMaterial(obj, newMaterial);
+}
+
+void ChangeObjectMaterial(GameObject obj, Material newMat) {
+  Material[] materials = obj.GetComponent<Renderer>().materials;
+  materials [0] = (Material)Instantiate (newMat);
+  obj.GetComponent<Renderer>().materials = materials;
+}
+
+void OnGUI() {
+  if (debug)
+    if (GUILayout.Button("Next Generation"))
+      IncrementGeneration();
+}
 }
 
 //
