@@ -32,3 +32,9 @@ sysinfo.txt
 # Builds
 *.apk
 *.unitypackage
+
+.DS_Store
+.vscode/
+
+/Assets/Standard\ Assets.meta
+/Assets/Standard\ Assets/
