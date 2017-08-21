@@ -13,7 +13,38 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
+struct StateNeighbourMap {
+  public bool state;
+  public int numNeighbours;
+
+  public StateNeighbourMap(bool s, int n) {
+    state = s;
+    numNeighbours = n;
+  }
+}
+
 public class GridManager : MonoBehaviour {
+  Dictionary<StateNeighbourMap, bool> rules = new Dictionary<StateNeighbourMap, bool>{
+    {new StateNeighbourMap(true, 0), false},
+    {new StateNeighbourMap(true, 1), false},
+    {new StateNeighbourMap(true, 2), true},
+    {new StateNeighbourMap(true, 3), true},
+    {new StateNeighbourMap(true, 4), false},
+    {new StateNeighbourMap(true, 5), false},
+    {new StateNeighbourMap(true, 6), false},
+    {new StateNeighbourMap(true, 7), false},
+    {new StateNeighbourMap(true, 8), false},
+
+    {new StateNeighbourMap(false, 0), false},
+    {new StateNeighbourMap(false, 1), false},
+    {new StateNeighbourMap(false, 2), false},
+    {new StateNeighbourMap(false, 3), true},
+    {new StateNeighbourMap(false, 4), false},
+    {new StateNeighbourMap(false, 5), false},
+    {new StateNeighbourMap(false, 6), false},
+    {new StateNeighbourMap(false, 7), false},
+    {new StateNeighbourMap(false, 8), false},
+  };
 
   public GameObject cellObject;
   public Material ALIVE_MATERIAL,
@@ -32,12 +63,13 @@ public class GridManager : MonoBehaviour {
   float timeLastIterated = 0,
         iterationDelay = 1f;
 
+  public bool debug;
 
 	void Awake () {
     gameSpace = GetComponent<Transform> ();
     grid = InitializeGrid (NUMBER_OF_CELLS);
 
-    displayGrid = InitializeDisplayGrid (grid);
+    displayGrid = InitializeDisplayGrid (grid, debug);
 
     DrawCells (displayGrid, SPACE_BETWEEN_CELLS, cellObject.transform.localScale.x, gameSpace.position.z);
 	}
@@ -48,14 +80,14 @@ public class GridManager : MonoBehaviour {
 
     for (int y = 0; y < howManyCells; y++) {
       for (int x = 0; x < howManyCells; x++) {
-        grid [y, x] = GetLiveOrDie ();
+        grid [y, x] = GetAliveOrDeadRandom ();
       }
     }
 
     return grid;
   }
 
-  GameObject[,] InitializeDisplayGrid(bool[,] referenceGrid){
+  GameObject[,] InitializeDisplayGrid(bool[,] referenceGrid, bool debug){
     
     GameObject[,] visualGrid = new GameObject[referenceGrid.GetLength(0), referenceGrid.GetLength(0)];
 
@@ -65,6 +97,9 @@ public class GridManager : MonoBehaviour {
         bool isAlive = referenceGrid [y, x];
 
         GameObject currentCell = (GameObject)Instantiate (cellObject);
+        currentCell.name = "Cell ("+x+";"+y+")";
+        if (!debug)
+          currentCell.transform.GetChild(0).gameObject.SetActive(false);
         visualGrid [y, x] = currentCell;
 
         Material[] materials = currentCell.GetComponent<Renderer>().materials;
@@ -83,7 +118,7 @@ public class GridManager : MonoBehaviour {
 
 
 
-  bool GetLiveOrDie(){
+  bool GetAliveOrDeadRandom(){
     float randomSeed = Random.value;
 
     return (randomSeed > 0.5f) ? true : false;
@@ -112,24 +147,65 @@ public class GridManager : MonoBehaviour {
   }
 
 
-
 	void Update () {
 
     if ((currentIteration < MAX_ITERATION_COUNT) && ((Time.fixedTime - timeLastIterated) >= iterationDelay)) {
-      List<bool> neighbours = GetAllNeighbours(0,0);
 
-      foreach (bool cell in neighbours) {
-        Debug.Log (cell);
-      }
+      grid = GetNextGeneration(grid);
+      UpdateDisplayGrid(grid);
+      // DrawCells(grid)
+      
 
       timeLastIterated = Time.fixedTime;
       currentIteration++;
     }
 	}
 
+  void UpdateDisplayGrid(bool[,] updatedGeneration) {
+    for (int y = 0; y < updatedGeneration.GetLength(0); y++) {
+      for (int x = 0; x < updatedGeneration.GetLength(0); x++) {
+        bool isAlive = updatedGeneration [y, x];
+
+        GameObject currentCell = displayGrid[y, x];
+        Material[] materials = currentCell.GetComponent<Renderer>().materials;
+
+        Material selectedMaterial = isAlive ? ALIVE_MATERIAL : DEAD_MATERIAL;
+
+        materials [0] = (Material)Instantiate (selectedMaterial);
+
+        currentCell.GetComponent<Renderer>().materials = materials;
+      }
+    }
+  }
+
+
+  bool[,] GetNextGeneration(bool[,] thisGeneration) {
+    bool[,] newGeneration = new bool[thisGeneration.GetLength(0), thisGeneration.GetLength(0)];
+    for (int y = 0; y < thisGeneration.GetLength(0); y++) {
+      // string output = "";
+      for (int x = 0; x < thisGeneration.GetLength(0); x++) {
+        int alive = GetNeighbours(x, y).Count;
+        newGeneration[y, x] = GetLiveOrDie(rules, thisGeneration[y,x], alive);
+        displayGrid[y, x].transform.Find("DebugText").GetComponent<TextMesh>().text = alive+"";
+
+        // output += " "+newGeneration[y, x];
+      }
+      // Debug.Log(output);
+    }
+
+    return newGeneration;
+  }
+
+  bool GetLiveOrDie(Dictionary<StateNeighbourMap, bool> rules, bool alive, int aliveNeighbours) {
+    StateNeighbourMap snm = new StateNeighbourMap(alive, aliveNeighbours);
+    bool shouldLive;
+    rules.TryGetValue(snm, out shouldLive);
+    return shouldLive;
+  }
+
   //  * - Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
 
-  List<bool> GetAllNeighbours(int xCoord, int yCoord) {
+  List<bool> GetNeighbours(int xCoord, int yCoord) {
 
     List<bool> neighbours = new List<bool> ();
 
@@ -145,7 +221,8 @@ public class GridManager : MonoBehaviour {
 
           GameObject currentDisplayCell = displayGrid [yIndex, xIndex];
           bool currentGridCell = grid [yIndex, xIndex];
-          neighbours.Add (currentGridCell);
+          if (currentGridCell)
+            neighbours.Add (currentGridCell);
         }
       }
     }
