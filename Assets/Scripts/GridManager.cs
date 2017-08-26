@@ -63,7 +63,6 @@ public class GridManager : MonoBehaviour {
   const int MAX_ITERATION_COUNT = 100;
   public float iterationDelay;
   float timeLastIterated = 0,
-        timeLastAnimated = 0,
         animationDelay;
 
   public bool debug;
@@ -76,7 +75,6 @@ public class GridManager : MonoBehaviour {
     displayGrid = InitializeDisplayGrid (grid, debug);
 
     DrawCells (displayGrid, SPACE_BETWEEN_CELLS, cellObject.transform.localScale.x, gameSpace.position.z);
-    UpdateDebugNeighbours();
 	}
 
 
@@ -86,6 +84,8 @@ public class GridManager : MonoBehaviour {
     for (int y = 0; y < howManyCells; y++) {
       for (int x = 0; x < howManyCells; x++) {
         grid [y, x] = GetAliveOrDeadRandom ();
+
+        
       }
     }
 
@@ -103,11 +103,12 @@ public class GridManager : MonoBehaviour {
 
         GameObject currentCell = (GameObject)Instantiate (cellObject);
         currentCell.name = "Cell ("+x+";"+y+")";
+        currentCell.GetComponent<Cell>().SetAlive(isAlive);
+
         if (!debug)
           currentCell.transform.GetChild(0).gameObject.SetActive(false);
         visualGrid [y, x] = currentCell;
 
-        ChangeObjectMaterial(currentCell, isAlive ? ALIVE_MATERIAL : DEAD_MATERIAL);
       }
     }
 
@@ -144,9 +145,6 @@ public class GridManager : MonoBehaviour {
 
 
 	void Update () {
-    if (Time.fixedTime - timeLastAnimated > animationDelay) {
-      AnimateCellMaterial();
-    }
 
     if (!debug)
       if ((currentIteration < MAX_ITERATION_COUNT) && ((Time.fixedTime - timeLastIterated) >= iterationDelay)) {
@@ -155,127 +153,33 @@ public class GridManager : MonoBehaviour {
 	}
 
   void IncrementGeneration(){
-    prevGrid = grid;
-    grid = GetNextGeneration(grid);
     UpdateDisplayGrid(grid);
-    UpdateDebugNeighbours();
     timeLastIterated = Time.fixedTime;
-    animationIteration = 0;
     currentIteration++;
-  }
-
-  void AnimateCellMaterial() {
-    animationIteration++;
-    for (int y = 0; y < grid.GetLength(0); y++) {
-      for (int x = 0; x < grid.GetLength(0); x++) {
-        bool isAlive = grid [y, x];
-
-        int aliveNeighbours = GetNeighbours(x, y).Count;
-        bool willLive = GetLiveOrDie(rules, grid[y,x], aliveNeighbours);
-
-        GameObject currentCell = displayGrid[y, x];
-        FadeObjectMaterialColor(currentCell, willLive);
-      }
-    }
-    timeLastAnimated = Time.fixedTime;
   }
 
   void UpdateDisplayGrid(bool[,] updatedGeneration) {
     for (int y = 0; y < updatedGeneration.GetLength(0); y++) {
       for (int x = 0; x < updatedGeneration.GetLength(0); x++) {
-        bool isAlive = updatedGeneration [y, x];
+        Cell cell = displayGrid[y, x].GetComponent<Cell>();
+        bool isAlive = cell.alive;
+        int liveNeighbours = cell.GetLiveNeighbours();
 
-        GameObject currentCell = displayGrid[y, x];
-        Material selectedMaterial = isAlive ? ALIVE_MATERIAL : DEAD_MATERIAL;
-        ChangeObjectMaterial(currentCell, selectedMaterial);
+        StateNeighbourMap snm = new StateNeighbourMap(isAlive, liveNeighbours);
+
+        bool shouldLive = rules[snm];
+        cell.SetAlive(shouldLive);
       }
     }
-  }
-
-  bool[,] GetNextGeneration(bool[,] thisGeneration) {
-    bool[,] newGeneration = new bool[thisGeneration.GetLength(0), thisGeneration.GetLength(0)];
-    for (int y = 0; y < thisGeneration.GetLength(0); y++) {
-      for (int x = 0; x < thisGeneration.GetLength(0); x++) {
-        int alive = GetNeighbours(x, y).Count;
-        newGeneration[y, x] = GetLiveOrDie(rules, thisGeneration[y,x], alive);
-        displayGrid[y, x].transform.Find("DebugText").GetComponent<TextMesh>().text = alive.ToString();
-      }
-    }
-
-    return newGeneration;
-  }
-
-  void UpdateDebugNeighbours() {
-    for (int y = 0; y < grid.GetLength(0); y++) {
-      for (int x = 0; x < grid.GetLength(0); x++) {
-        int alive = GetNeighbours(x, y).Count;
-        displayGrid[y, x].transform.Find("DebugText").GetComponent<TextMesh>().text = alive+"";
-      }
-    }
-  }
-
-  bool GetLiveOrDie(Dictionary<StateNeighbourMap, bool> rules, bool alive, int aliveNeighbours) {
-    StateNeighbourMap snm = new StateNeighbourMap(alive, aliveNeighbours);
-    bool shouldLive;
-    rules.TryGetValue(snm, out shouldLive);
-    return shouldLive;
   }
 
   //  * - Any dead cell with exactly three live neighbours becomes a live cell, as if by reproduction.
 
-  List<bool> GetNeighbours(int xCoord, int yCoord) {
-
-    List<bool> neighbours = new List<bool> ();
-
-    for (int y = -1; y <= 1; y++) {
-      for (int x = -1; x <= 1; x++) {
-
-        int yIndex = yCoord + y;
-        int xIndex = xCoord + x;
-
-        if ((yIndex >= 0) && (xIndex >= 0) &&                                        // protect against negative array index
-            (yIndex < grid.GetLength (0)) && (xIndex < grid.GetLength (0)) &&        // protect against index past array length
-            (!((xIndex == xCoord) && (yIndex == yCoord)))) {                         // we shouldn't count ourself (when calculated indexes equal what was given to us)
-
-          GameObject currentDisplayCell = displayGrid [yIndex, xIndex];
-          bool currentGridCell = grid [yIndex, xIndex];
-          if (currentGridCell)
-            neighbours.Add (currentGridCell);
-        }
-      }
-    }
-  
-    return neighbours;
+  void OnGUI() {
+    if (debug)
+      if (GUILayout.Button("Next Generation"))
+        IncrementGeneration();
   }
-
-  void FadeObjectMaterialColor(GameObject obj, bool willLive) {
-    Material material = obj.GetComponent<Renderer>().materials[0];
-    Material newMaterial = (Material)Instantiate (material);
-
-    float perc = (animationIteration/(iterationDelay / animationDelay));
-    Material targetMat = willLive ? ALIVE_MATERIAL : DEAD_MATERIAL;
-
-    Color transitionColor = Color.Lerp(
-      material.GetColor("_Color"),
-      targetMat.GetColor("_Color"),
-      perc
-    );
-    
-    newMaterial.SetColor("_Color", transitionColor); 
-    ChangeObjectMaterial(obj, newMaterial);
-}
-
-void ChangeObjectMaterial(GameObject obj, Material newMat) {
-  Material[] materials = obj.GetComponent<Renderer>().materials;
-  materials [0] = (Material)Instantiate (newMat);
-  obj.GetComponent<Renderer>().materials = materials;
-}
-
-void OnGUI() {
-  if (debug)
-    if (GUILayout.Button("Next Generation"))
-      IncrementGeneration();
-}
 }
 
 //
