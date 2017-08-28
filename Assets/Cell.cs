@@ -9,13 +9,22 @@ public class Cell : MonoBehaviour {
                   DEAD_MATERIAL;
 
 	List<GameObject> neighbourObj;
+	TextMesh debugText;
 
 	void Awake() {
 		neighbourObj = new List<GameObject>();
+		debugText = GetComponentInChildren<TextMesh>();
+		debugText.gameObject.SetActive(false);
+		ChangeObjectMaterial(ALIVE_MATERIAL);
 	}
 
 	void Update() {
-		GetComponentInChildren<TextMesh>().text = GetLiveNeighbours().ToString();
+		if (debugText.gameObject.activeInHierarchy)	
+			debugText.text = GetLiveNeighbours().ToString();
+	}
+
+	public int GetNeighbours() {
+		return neighbourObj.Count;
 	}
 
 	public int GetLiveNeighbours() {
@@ -32,9 +41,11 @@ public class Cell : MonoBehaviour {
 	public void SetAlive(bool alive) {
 		this.alive = alive;
 		if (alive)
-			ChangeObjectMaterial(ALIVE_MATERIAL);
+			// ChangeObjectMaterial(ALIVE_MATERIAL);
+			GetComponent<MeshRenderer>().enabled = true;
 		else
-			ChangeObjectMaterial(DEAD_MATERIAL);
+			// ChangeObjectMaterial(DEAD_MATERIAL);
+			GetComponent<MeshRenderer>().enabled= false;
 	}
 
 	void OnTriggerEnter(Collider col) {
@@ -51,5 +62,14 @@ public class Cell : MonoBehaviour {
 		Material[] materials = GetComponent<Renderer>().materials;
 		materials [0] = (Material)Instantiate (newMat);
 		GetComponent<Renderer>().materials = materials;
+	}
+
+	void OnDrawGizmosSelected() {
+		debugText.gameObject.SetActive(true);
+    Gizmos.color = Color.magenta;
+		foreach (GameObject g in neighbourObj) {
+			if (g.GetComponent<Cell>().alive)
+				Gizmos.DrawCube(g.transform.position, g.transform.localScale);
+		}
 	}
 }

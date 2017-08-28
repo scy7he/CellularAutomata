@@ -16,7 +16,6 @@ using UnityEngine;
 struct StateNeighbourMap {
   public bool state;
   public int numNeighbours;
-
   public StateNeighbourMap(bool s, int n) {
     state = s;
     numNeighbours = n;
@@ -24,6 +23,22 @@ struct StateNeighbourMap {
 }
 
 public class GridManager : MonoBehaviour {
+
+  public float liveAccuracy, liveAccThreshold;
+  public float reviveAccuracy, reviveAccThreshold;
+
+  bool rulesShouldLive(bool alive, int neighbours, int aliveNeighbours) {
+    float ratio = (float)aliveNeighbours/(float)neighbours;
+
+    if (alive) {
+      return (ratio - liveAccuracy) > liveAccThreshold;
+      // return (ratio >= 2f/8f - liveAccuracy) && (ratio <= 3f/8f + liveAccuracy);
+    }
+    else {
+      return (ratio - reviveAccuracy) > reviveAccThreshold;
+      // return ((ratio >= (3f/8f - reviveAccuracy)) && (ratio <= (3f/8f + reviveAccuracy)));
+    }
+  }
   Dictionary<StateNeighbourMap, bool> rules = new Dictionary<StateNeighbourMap, bool>{
     {new StateNeighbourMap(true, 0), false},
     {new StateNeighbourMap(true, 1), false},
@@ -47,16 +62,13 @@ public class GridManager : MonoBehaviour {
   };
 
   public GameObject cellObject;
-  public Material ALIVE_MATERIAL,
-                  DEAD_MATERIAL;
-
-  public int NUMBER_OF_CELLS = 15;
+  public int NUMBER_OF_CELLS;
   public const float SPACE_BETWEEN_CELLS = 0.1f;
 
   Transform gameSpace;
 
-  private bool[,] grid, prevGrid;
-  private GameObject[,] displayGrid;
+  private bool[,,] grid;
+  private GameObject[,,] displayGrid;
 
   int currentIteration = 0,
       animationIteration = 0;
@@ -69,45 +81,44 @@ public class GridManager : MonoBehaviour {
 
 	void Awake () {
     gameSpace = GetComponent<Transform> ();
-    grid = InitializeGrid (NUMBER_OF_CELLS);
-    animationDelay = iterationDelay/10f;
 
-    displayGrid = InitializeDisplayGrid (grid, debug);
+    displayGrid = InitializeDisplayGrid (InitializeGrid (NUMBER_OF_CELLS), debug);
 
     DrawCells (displayGrid, SPACE_BETWEEN_CELLS, cellObject.transform.localScale.x, gameSpace.position.z);
 	}
 
 
-  bool[,] InitializeGrid(int howManyCells) {
-    bool[,] grid = new bool[howManyCells, howManyCells];
+  bool[,,] InitializeGrid(int howManyCells) {
+    bool[,,] grid = new bool[howManyCells, howManyCells, howManyCells];
 
     for (int y = 0; y < howManyCells; y++) {
       for (int x = 0; x < howManyCells; x++) {
-        grid [y, x] = GetAliveOrDeadRandom ();
-
-        
+        for (int z = 0; z < howManyCells; z++) {
+          grid [z, y, x] = GetAliveOrDeadRandom ();
+        }
       }
     }
 
     return grid;
   }
 
-  GameObject[,] InitializeDisplayGrid(bool[,] referenceGrid, bool debug){
+  GameObject[,,] InitializeDisplayGrid(bool[,,] referenceGrid, bool debug){
     
-    GameObject[,] visualGrid = new GameObject[referenceGrid.GetLength(0), referenceGrid.GetLength(0)];
+    GameObject[,,] visualGrid = new GameObject[referenceGrid.GetLength(0), referenceGrid.GetLength(1), referenceGrid.GetLength(2)];
 
     for (int y = 0; y < referenceGrid.GetLength(0); y++) {
       for (int x = 0; x < referenceGrid.GetLength(0); x++) {
+        for (int z = 0; z < referenceGrid.GetLength(0); z++) {
+          bool isAlive = referenceGrid [z, y, x];
 
-        bool isAlive = referenceGrid [y, x];
+          GameObject currentCell = (GameObject)Instantiate (cellObject);
+          currentCell.name = "Cell ("+x+";"+y+";"+z+")";
+          currentCell.GetComponent<Cell>().SetAlive(isAlive);
 
-        GameObject currentCell = (GameObject)Instantiate (cellObject);
-        currentCell.name = "Cell ("+x+";"+y+")";
-        currentCell.GetComponent<Cell>().SetAlive(isAlive);
-
-        if (!debug)
-          currentCell.transform.GetChild(0).gameObject.SetActive(false);
-        visualGrid [y, x] = currentCell;
+          if (!debug)
+            currentCell.transform.GetChild(0).gameObject.SetActive(false);
+          visualGrid [z, y, x] = currentCell;
+        }
 
       }
     }
@@ -118,27 +129,31 @@ public class GridManager : MonoBehaviour {
 
 
   bool GetAliveOrDeadRandom(){
-    return (Random.value > 0.5f) ? true : false;
+    return (Random.value > 0.8f) ? true : false;
   }
 
 
-  void DrawCells(GameObject[,] actualObjectsToDraw, float spaceBetweenCells, float cellScale, float depthPosition) {
+  void DrawCells(GameObject[,,] actualObjectsToDraw, float spaceBetweenCells, float cellScale, float depthPosition) {
 
     for (int y = 0; y < actualObjectsToDraw.GetLength(0); y++) {
       for (int x = 0; x < actualObjectsToDraw.GetLength(0); x++) {
+        for (int z = 0; z < actualObjectsToDraw.GetLength(0); z++) {
+          float positionX = x * cellScale;
+          float spaceX = x * spaceBetweenCells;
+          float positionWithSpaceX = positionX + spaceX;
 
-        float positionX = x * cellScale;
-        float spaceX = x * spaceBetweenCells;
-        float positionWithSpaceX = positionX + spaceX;
+          float positionY = y * cellScale;
+          float spaceY = y * spaceBetweenCells;
+          float positionWithSpaceY = positionY + spaceY;
 
-        float positionY = y * cellScale;
-        float spaceY = y * spaceBetweenCells;
-        float positionWithSpaceY = positionY + spaceY;
+          float positionZ = z * cellScale;
+          float spaceZ = z * spaceBetweenCells;
+          float positionWithSpaceZ = positionZ + spaceZ;
 
-        Vector3 clonePosition = new Vector3 (positionWithSpaceX, positionWithSpaceY, depthPosition);
+          Vector3 clonePosition = new Vector3 (positionWithSpaceX, positionWithSpaceY, positionWithSpaceZ);
 
-        actualObjectsToDraw [y, x].transform.position = clonePosition;
-       
+          actualObjectsToDraw [z, y, x].transform.position = clonePosition;
+        }
       }
     }
   }
@@ -153,22 +168,23 @@ public class GridManager : MonoBehaviour {
 	}
 
   void IncrementGeneration(){
-    UpdateDisplayGrid(grid);
+    UpdateDisplayGrid();
     timeLastIterated = Time.fixedTime;
     currentIteration++;
   }
 
-  void UpdateDisplayGrid(bool[,] updatedGeneration) {
-    for (int y = 0; y < updatedGeneration.GetLength(0); y++) {
-      for (int x = 0; x < updatedGeneration.GetLength(0); x++) {
-        Cell cell = displayGrid[y, x].GetComponent<Cell>();
-        bool isAlive = cell.alive;
-        int liveNeighbours = cell.GetLiveNeighbours();
+  void UpdateDisplayGrid() {
+    for (int y = 0; y < displayGrid.GetLength(0); y++) {
+      for (int x = 0; x < displayGrid.GetLength(0); x++) {
+        for (int z = 0; z < displayGrid.GetLength(0); z++) {
+          Cell cell = displayGrid[z, y, x].GetComponent<Cell>();
+          bool isAlive = cell.alive;
+          int liveNeighbours = cell.GetLiveNeighbours();
 
-        StateNeighbourMap snm = new StateNeighbourMap(isAlive, liveNeighbours);
-
-        bool shouldLive = rules[snm];
-        cell.SetAlive(shouldLive);
+          // Debug.Log(cell.name+": "+liveNeighbours+","+cell.GetNeighbours()+" ("+(float)liveNeighbours/(float)cell.GetNeighbours());
+          bool shouldLive = rulesShouldLive(isAlive, cell.GetNeighbours(), liveNeighbours);
+          cell.SetAlive(shouldLive);
+        }
       }
     }
   }
