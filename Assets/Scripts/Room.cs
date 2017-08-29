@@ -27,17 +27,20 @@ public class Room : MonoBehaviour {
     Gizmos.color = debugColor;
     if (vertices != null){
       foreach(Vector3 vertex in vertices) {
-        Gizmos.DrawSphere(vertex, .2f);
+        Vector3 localPos = transform.TransformPoint(vertex);
+        Gizmos.DrawSphere(localPos, .1f);
       }
     }
   }
 
   void OnGUI() {
     if (showIndices && vertices != null) {
+      GUI.color = Color.green;
       for (int i=0; i<vertices.Length; i++) {
-        Vector3 screenPosition = Camera.main.WorldToScreenPoint(vertices[i]);
-        GUI.color = Color.green;
-        GUI.Label(new Rect(screenPosition.x, Screen.height - screenPosition.y,75,25), i.ToString());
+        Vector3 localPos = transform.TransformPoint(vertices[i]);
+        Vector3 screenPosition = Camera.main.WorldToScreenPoint(localPos);
+        float invertedY = Screen.height - screenPosition.y;
+        GUI.Label(new Rect(screenPosition.x, invertedY,75,25), i.ToString());
       }
     }
   }
