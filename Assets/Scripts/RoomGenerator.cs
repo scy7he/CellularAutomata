@@ -8,110 +8,47 @@ public enum GenerationAlgorithm { MAZE = 0 };
 public class RoomGenerator : MonoBehaviour {
   public GenerationAlgorithm method;
   public GameObject roomPrefab;
-  public Material primaryMaterial, secondaryMaterial;
-  public float roomScale;
-  public bool showIndices;
+  public Mesh roomMesh;
+  public float roomScale, seedLifeChance, stepDelay;
+  public bool showIndices, timerActive, useManualMesh;
   public Vector2 floorSize;
-  List<GameObject> rooms;
-  float lastStepTime = 0f;
+  List<Room> rooms;
+  float lastStepTime;
+  int generationCount;
+  public string increaseAmount;
 
-  public bool[,] seed = {
-    {true, false, false, false, false, false, false, false, false, false },
-    {false, true, false, false, false, false, false, false, false, false },
-    {false, true, true, false, false, false, false, false, false, false },
-    {false, true, false, false, false, false, false, false, false, false },
-    {false, false, false, false, false, false, false, false, false, false },
-    {false, false, false, false, false, false, false, false, false, false },
-    {false, false, false, false, false, false, false, false, false, false },
-    {false, false, false, false, false, false, false, false, false, false },
-    {false, false, false, false, false, false, false, false, false, false },
-    {false, false, false, false, false, false, false, false, false, false },
-  };
-
-  Vector3[] vertices = {
-    Vector3.zero,
-    Vector3.right,
-    Vector3.right + Vector3.up,
-    Vector3.up,
-    Vector3.up + Vector3.forward,
-    Vector3.up + Vector3.forward + Vector3.right,
-    Vector3.forward + Vector3.right,
-    Vector3.forward
-  };
-
-  int[] triangles = {
-    0, 2, 1, //face front
-    0, 3, 2,
-    2, 3, 4, //face top
-    2, 4, 5,
-    1, 2, 5, //face right
-    1, 5, 6,
-    0, 7, 4, //face left
-    0, 4, 3,
-    5, 4, 7, //face back
-    5, 7, 6,
-    0, 6, 7, //face bottom
-    0, 1, 6
-  };
 
   void Start() {
-    rooms = new List<GameObject>();
+    timerActive = false;
+    lastStepTime = 0f;
+    roomMesh = (!roomMesh || useManualMesh) ? CubeMeshGenerator.GenerateMesh(roomScale) : roomMesh;
+    ResetGeneration(floorSize);
+  }
 
-    for (int y=0; y<floorSize.y; y++) {
-      for (int x=0; x<floorSize.x; x++) {
-        Vector3 position = GetPositionAtIndex(x, y, floorSize, roomScale);
-        rooms.Add(CreateCubeMesh(x, y, vertices, triangles, roomScale, position, seed[x,y]));
-      }
+  void InstantiateRooms(Vector2 dimensions, float scale, int indexStartAt=0) {
+    int gridSize = GetGridSize(dimensions);
+
+    for (int index = indexStartAt; index < gridSize; index++) {
+      int x = GetXYFromIndex(index, dimensions)[0],
+          y = GetXYFromIndex(index, dimensions)[1];
+      Vector3 position = GetPositionAtIndex(x, y, dimensions, scale);
+      string name ="Room "+x+" "+y; 
+      bool state = GetRandomBool(seedLifeChance);
+      rooms.Add(CreateCubeGameObj(roomMesh, name, position, state).GetComponent<Room>());
     }
   }
-
-  void Update() {
-
-    if (Time.fixedTime - lastStepTime > 1f) {
-      switch(method) {
-        case GenerationAlgorithm.MAZE:
-          PerformRandom();
-          break;
-      }
-    }
-
-  }
-
-  void PerformRandom() {
-
-  }
-
-  GameObject CreateCubeMesh(int x, int y, Vector3[] verts, int[] tris, float scale, Vector3 position, bool alive) {
+  GameObject CreateCubeGameObj(Mesh mesh, string name, Vector3 position, bool alive) {
     GameObject newCell = Instantiate(roomPrefab, position, Quaternion.identity, transform) as GameObject;
-    newCell.name = "Room "+x+" "+y;
-    newCell.GetComponent<Room>().SetAlive(alive);
-    newCell.GetComponent<Room>().showNeighbourCount = true;
-
-    Material newMaterial = (Material) Instantiate(alive ? primaryMaterial : secondaryMaterial);
-    Material[] materials = newCell.GetComponent<Renderer>().materials;
-    materials [0] = newMaterial;
-    newCell.GetComponent<Renderer>().materials = materials;
-
-    Mesh mesh = newCell.GetComponent<MeshFilter>().mesh;
-
-    for (int i=0; i<verts.Length; i++) {
-      verts[i] *= scale;
-    }
-
-    mesh.Clear ();
-    mesh.vertices = verts;
-    mesh.triangles = tris;
-    mesh.RecalculateNormals ();
-
-    newCell.GetComponent<MeshCollider>().sharedMesh = mesh;
-
-    return newCell;
+    newCell.name = name;
+    Room newRoom = newCell.GetComponent<Room>();
+    newRoom.SetAlive(alive, initial: true);
+    newCell.GetComponent<MeshFilter>().mesh = roomMesh;
+   return newCell;
   }
 
   Vector3 GetPositionAtIndex(int x, int y, Vector2 max, float scale) {
     Vector3 pos = new Vector3(x * scale, 0f, y * scale);
     Vector3 extents = new Vector3(max.x * scale, 0f, max.y * scale);
-
     return transform.position + pos - (extents/2);
   }
 
@@ -119,32 +56,103 @@ public class RoomGenerator : MonoBehaviour {
     return (Vector3.one * scale)/2;
   }
 
-  void OnDrawGizmosSelected() {
-    Gizmos.color = Color.cyan;
-    for (int y=0; y<floorSize.y; y++) {
-      for (int x=0; x<floorSize.x; x++) {
-        Gizmos.DrawWireCube(
-          GetPositionAtIndex(x, y, floorSize, roomScale) + GetCenterOffset(roomScale), 
-          Vector3.one * roomScale
-        );
-      }
+  int[] GetXYFromIndex(int index, Vector2 dimensions) {
+      int x = (int) (index % dimensions.x),
+          y = (int) ((index - x) / dimensions.x);
+    return new int[2]{x,y};
+  }
+
+  int GetGridSize(Vector2 xy) {
+    return (int) (xy.x * xy.y);
+  }
+
+  void ResetGeneration(Vector2 floorSize, int offset=0) {
+    generationCount = 0;
+    if (offset == 0) {
+      rooms = new List<Room>(GetGridSize(floorSize));
     }
+    InstantiateRooms(floorSize, roomScale, offset);
+  }
+
+  void IncreaseGridBy(Vector2 floorSize, int dSize) {
+    int oldSize = GetGridSize(floorSize);
+    floorSize.x += dSize;
+    floorSize.y += dSize;
+    ResetGeneration(floorSize, oldSize);
+  }
+
+  bool GetRandomBool(float chance) {
+    return (Random.value > chance) ? true : false;
+  }
+
+  bool IsUpdateTime(float timeD, float lastTime, float delay) {
+    return (timeD - lastTime > delay);
+  }
+
+  void Update() {
+    if (Input.GetKeyDown(KeyCode.Space) ||
+        (timerActive && IsUpdateTime(Time.deltaTime, lastStepTime, stepDelay))){
+      lastStepTime = RunSingleProgression(rooms);
+    }
+  }
+
+  float RunSingleProgression(List<Room> rooms) {
+    foreach(Room room in rooms) {
+      room.StepGeneration();
+    }
+    UpdateGeneration();
+    return Time.fixedTime;
+  }
+
+  int UpdateGeneration() {
+    return generationCount++;
+  }
+
+  void ResetGeneration() {
+    generationCount = 0;
+  }
+
+  Vector2 GetGridDimensions() {
+    return this.floorSize;
   }
 
   void OnGUI() {
-    if (showIndices) {
-      GUI.color = Color.red;
-      GUIStyle fontStyle = new GUIStyle();
-      fontStyle.fontSize = 50;
-      fontStyle.normal.textColor = Color.white;
-
-      for (int i=0; i<rooms.Count; i++) {
-        Vector3 screenPosition = Camera.main.WorldToScreenPoint(
-          rooms[i].transform.position + GetCenterOffset(roomScale)
-        );
-        float invertedY = Screen.height - screenPosition.y;
-        GUI.Label(new Rect(screenPosition.x, invertedY,75,25), i.ToString(), fontStyle);
+  
+    if (GUILayout.Button("Load Initial State")) {
+      timerActive = false;
+      generationCount = 0;
+      foreach (Room room in rooms) {
+        room.RestoreInitialState();
       }
     }
+
+    if (GUILayout.Button("Load Random State")) {
+      timerActive = false;
+      generationCount = 0;
+      foreach (Room room in rooms) {
+        room.SetAlive(GetRandomBool(.8f));
+      }
+    }
+
+    if (GUILayout.Button("Play/Pause")) {
+      timerActive = !timerActive;
+    }
+
+    increaseAmount = GUILayout.TextField(increaseAmount,2);
+    if (GUILayout.Button("Increase grid by: ")) {
+      IncreaseGridBy(GetGridDimensions(), int.Parse(increaseAmount));
+    }
   }
+  // void OnDrawGizmosSelected() {
+  //   Gizmos.color = Color.cyan;
+  //   for (int y=0; y<floorSize.y; y++) {
+  //     for (int x=0; x<floorSize.x; x++) {
+  //       Gizmos.DrawWireCube(
+  //         GetPositionAtIndex(x, y, floorSize, roomScale) + GetCenterOffset(roomScale), 
+  //         Vector3.one * roomScale
+  //       );
+  //     }
+  //   }
+  // }
+
 }

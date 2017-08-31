@@ -37,8 +37,10 @@ public class CameraController : MonoBehaviour {
 
   void PerformSceneViewMode() {
     Camera[] cams = UnityEditor.SceneView.GetAllSceneCameras();
-    transform.position = cams[0].transform.position;
-    transform.rotation = cams[0].transform.rotation;
+    transform.position = Vector3.Lerp(transform.position, cams[0].transform.position, Time.deltaTime);
+
+    Quaternion currentRotation = transform.rotation;
+    transform.rotation = Quaternion.Lerp(currentRotation, cams[0].transform.rotation, Time.deltaTime);
   }
 
   Vector3 GetTargetCenter() {
@@ -46,10 +48,10 @@ public class CameraController : MonoBehaviour {
     return target.position;
   }
 
-  void OnDrawGizmosSelected() {
-    if (cam != null) {
-      Gizmos.color = Color.red;
-      Gizmos.DrawLine(transform.position, GetTargetCenter());
-    }
-  }
+  // void OnDrawGizmosSelected() {
+  //   if (cam != null) {
+  //     Gizmos.color = Color.red;
+  //     Gizmos.DrawLine(transform.position, GetTargetCenter());
+  //   }
+  // }
 }
