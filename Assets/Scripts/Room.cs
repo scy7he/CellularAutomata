@@ -16,7 +16,6 @@ public class Room : MonoBehaviour {
   Vector3 center;
   float detectionRadius = 2f;
   List<Room> neighbours;
-
   bool isSelected;
 
   void Start() {
@@ -24,7 +23,7 @@ public class Room : MonoBehaviour {
     vertices         = mesh.vertices;
     debugColor       = new Color(.9f, .3f, .55f, .8f);
     detectDirections = InitDetectionVectors(walls * 2);
-    neighbours       = new List<Room>(walls);
+    neighbours       = new List<Room>(walls * 2);
     center           = GetComponent<Renderer>().bounds.center;
     neighbours       = findNeighbours(center, detectDirections);
   }
@@ -56,7 +55,6 @@ public class Room : MonoBehaviour {
         }
       }
     }
-
     return foundAdjacent;
   }
 
@@ -85,9 +83,11 @@ public class Room : MonoBehaviour {
 
   public int GetAliveNeighbours() {
     int alive = 0;
-    foreach (Room n in neighbours) {
-      if (n.alive) {
-        alive++;
+    if (neighbours.Count > 0) {
+      foreach (Room n in neighbours) {
+        if (n.alive) {
+          alive++;
+        }
       }
     }
     return alive;
@@ -95,7 +95,6 @@ public class Room : MonoBehaviour {
 
   Vector3[] InitDetectionVectors(int wallCount) {
     Vector3[] directions = new Vector3[wallCount];
-
     Vector3 origin = Vector3.forward;
     directions[0] = origin;
 
@@ -112,54 +111,47 @@ public class Room : MonoBehaviour {
   }
 
   void OnDrawGizmosSelected() {
-    Gizmos.color = debugColor;
-    // if (vertices != null){
-    //   foreach(Vector3 vertex in vertices) {
-    //     Vector3 localPos = transform.TransformPoint(vertex);
-    //     Gizmos.DrawSphere(localPos, .1f);
-    //   }
-    // }
+    if (gameObject != null) {
+      Gizmos.color = debugColor;
 
-    if (detectDirections != null) {
-      // Gizmos.color = Color.green;
-      foreach(Vector3 d in detectDirections) {
-        Gizmos.DrawRay(center, d *1.5f);
+      if (detectDirections != null) {
+        foreach(Vector3 d in detectDirections) {
+          Gizmos.DrawRay(center, d *1.5f);
+        }
       }
-    }
 
-    foreach(Room r in neighbours) {
-      if (r.IsAlive()) {
-        Gizmos.color = new Color(.2f, .8f, .2f, .95f);
-        Gizmos.DrawWireCube(r.center, r.transform.localScale * 1.2f);
+      foreach(Room r in neighbours) {
+        if (r.IsAlive()) {
+          Gizmos.color = new Color(.2f, .8f, .2f, .95f);
+          Gizmos.DrawWireCube(r.center, r.transform.localScale * 1.2f);
+        }
       }
-      else {
-        // Gizmos.color = Color.black;
-        // Gizmos.DrawCube(r.center, Vector3.one * 1.2f);
-      }
+      isSelected = true;
     }
-    isSelected = true;
   }
 
   void OnGUI() {
-    if (showIndices && vertices != null) {
-      GUI.color = Color.green;
-      for (int i=0; i<vertices.Length; i++) {
-        Vector3 localPos = transform.TransformPoint(vertices[i]);
-        Vector3 screenPosition = Camera.main.WorldToScreenPoint(localPos);
-        float invertedY = Screen.height - screenPosition.y;
-        GUI.Label(new Rect(screenPosition.x, invertedY,75,25), i.ToString());
+    if (gameObject) {
+      if (showIndices && vertices != null) {
+        GUI.color = Color.green;
+        for (int i=0; i<vertices.Length; i++) {
+          Vector3 localPos = transform.TransformPoint(vertices[i]);
+          Vector3 screenPosition = Camera.main.WorldToScreenPoint(localPos);
+          float invertedY = Screen.height - screenPosition.y;
+          GUI.Label(new Rect(screenPosition.x, invertedY, 75, 25), i.ToString());
+        }
       }
-    }
 
-    if (showNeighbourCount && isSelected && neighbours != null) {
-      GUI.color = Color.white;
-      GUIStyle fontStyle = new GUIStyle();
-      fontStyle.fontSize = 50;
-      fontStyle.normal.textColor = Color.white;
+      if (showNeighbourCount && isSelected && neighbours != null) {
+        GUI.color = Color.white;
+        GUIStyle fontStyle = new GUIStyle();
+        fontStyle.fontSize = 50;
+        fontStyle.normal.textColor = Color.white;
 
-      Vector3 screenPosition = Camera.main.WorldToScreenPoint( center );
-      float invertedY = Screen.height - screenPosition.y;
-      GUI.Label(new Rect(screenPosition.x, invertedY,75,25), GetAliveNeighbours().ToString(), fontStyle);
+        Vector3 screenPosition = Camera.main.WorldToScreenPoint( center );
+        float invertedY = Screen.height - screenPosition.y;
+        GUI.Label(new Rect(screenPosition.x, invertedY,75,25), GetAliveNeighbours().ToString(), fontStyle);
+      }
     }
   }
 }

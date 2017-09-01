@@ -6,12 +6,16 @@ public enum CameraMode { KEEP_LOOKING = 0, SCENE_VIEW };
 
 public class CameraController : MonoBehaviour {
   public Transform target;
+  public Light mainDirectional;
   public CameraMode cameraMode;
   Vector3 lookTargetDir;
   private Camera cam;
+  public bool affectLight;
+  float lightTimer;
 
-  void Start(){
+   void Start(){
     cam = GetComponent<Camera>();
+    lightTimer = Time.fixedTime;
   }
 
   void Update() {
@@ -22,6 +26,18 @@ public class CameraController : MonoBehaviour {
       case CameraMode.SCENE_VIEW:
         PerformSceneViewMode();
         break;
+    }
+    
+    if ((affectLight) && (Time.fixedTime - lightTimer > .05f)) {
+      Vector3 targTransposed = new Vector3(0, target.position.y, 0);
+      Vector3 transTransposed = new Vector3(0, transform.position.y, 0);
+      Vector3 lightTransposed = new Vector3(0, mainDirectional.transform.position.y, 0);
+
+      float meFloor = Vector3.Distance(transTransposed, targTransposed);
+      float lightFloor = Vector3.Distance(lightTransposed, targTransposed)/5;
+      
+      mainDirectional.intensity = Mathf.LerpUnclamped(0f, 1f, meFloor/lightFloor);
+      lightTimer = Time.fixedTime;
     }
   }
 
@@ -44,14 +60,7 @@ public class CameraController : MonoBehaviour {
   }
 
   Vector3 GetTargetCenter() {
-    // return target.GetComponent<Renderer>().bounds.center;
     return target.position;
   }
 
-  // void OnDrawGizmosSelected() {
-  //   if (cam != null) {
-  //     Gizmos.color = Color.red;
-  //     Gizmos.DrawLine(transform.position, GetTargetCenter());
-  //   }
-  // }
 }
